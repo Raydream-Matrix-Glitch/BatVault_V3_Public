@@ -1,0 +1,178 @@
+{
+  "title": "BatVault Core Metrics",
+  "uid": "batvault-core",
+  "schemaVersion": 36,
+  "version": 2,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s","10s","30s","1m","5m"] },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "P95 TTFB (Gateway)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_ttfb_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 seconds"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "P95 TTFB (Gateway /v2/query)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_ttfb_seconds_bucket{route=\"/v2/query\"}[5m])) by (le))",
+          "legendFormat": "p95 seconds"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Resolver Cache Hit Ratio (%)",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(cache_hit_total{service=\"resolver\"}[5m])) / (sum(rate(cache_hit_total{service=\"resolver\"}[5m])) + sum(rate(cache_miss_total{service=\"resolver\"}[5m])))",
+          "legendFormat": "resolver hit %"
+        }
+      ],
+      "options": { "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Evidence Cache Hit Ratio (%)",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(cache_hit_total{service=\"memory_api\"}[5m])) / (sum(rate(cache_hit_total{service=\"memory_api\"}[5m])) + sum(rate(cache_miss_total{service=\"memory_api\"}[5m])))",
+          "legendFormat": "evidence hit %"
+        }
+      ],
+      "options": { "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Boundary Signals: 403/404 rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum(rate(memory_api_http_requests_total{code=~\"403|404\"}[5m]))",
+          "legendFormat": "403/404 /s"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Selector Stage P95 (Gateway)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_stage_selector_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 s"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Bundle Stage P95 (Gateway)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_stage_bundle_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 s"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Expand Stage P95 (Memory)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(memory_stage_expand_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 s"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Snapshot Drift: 412 rate",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum(rate(memory_api_http_requests_total{code=\"412\"}[5m]))",
+          "legendFormat": "412 /s"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx Rate by Service",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "targets": [
+        { "expr": "sum(rate(api_edge_http_requests_total{code=~\"5..\"}[5m]))", "legendFormat": "api_edge 5xx/s" },
+        { "expr": "sum(rate(gateway_http_requests_total{code=~\"5..\"}[5m]))", "legendFormat": "gateway 5xx/s" },
+        { "expr": "sum(rate(memory_api_http_requests_total{code=~\"5..\"}[5m]))", "legendFormat": "memory_api 5xx/s" }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Validator Errors (/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "targets": [
+        {
+          "expr": "sum(rate(validator_errors[5m]))",
+          "legendFormat": "errors/s"
+        }
+      ],
+      "options": { "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Bundle Bytes (response.json)",
+      "fieldConfig": { "defaults": { "unit": "bytes" } },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "targets": [
+        { "expr": "sum(rate(artifact_bytes_total{artifact=\"response.json\"}[5m]))", "legendFormat": "bytes/s" }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    }
+    ,
+    {
+      "type": "timeseries",
+      "title": "Graph FP Mismatch Rate (%)",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(gateway_graph_fp_mismatch_total[5m])) / clamp_min(sum(rate(gateway_graph_fp_mismatch_total[5m])) + sum(rate(gateway_graph_fp_verified_total[5m])), 1)",
+          "legendFormat": "mismatch % (5m)"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    },
+    {
+      "type": "timeseries",
+      "title": "Graph FP Events (/s)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "targets": [
+        { "expr": "sum(rate(gateway_graph_fp_verified_total[5m]))",  "legendFormat": "verified /s" },
+        { "expr": "sum(rate(gateway_graph_fp_mismatch_total[5m]))", "legendFormat": "mismatch /s" }
+      ],
+      "options": { "legend": { "displayMode": "table" }, "exemplars": true }
+    }
+  ]
+}

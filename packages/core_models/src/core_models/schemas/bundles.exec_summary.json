@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batvault.dev/schemas/bundles.exec_summary.json",
+  "title": "Exec Summary (response.json)",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": "v3" },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "oneOf": [
+            { "$ref": "./anchor.json" },
+            { "$ref": "./decision.json" },
+            { "$ref": "./event.json" }
+          ]
+        },
+        "graph": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "edges": {
+              "type": "array",
+              "items": { "$ref": "./edge.oriented.json" }
+            }
+          },
+          "required": ["edges"]
+        },
+        "meta": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowed_ids": { "type": "array", "items": { "type": "string" } },
+            "fingerprints": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": { "graph_fp": { "type": "string" } },
+              "required": ["graph_fp"]
+            },
+            "allowed_ids_fp": { "type": "string" },
+            "policy_fp": { "type": "string" },
+            "snapshot_etag": { "type": "string" },
+            "bundle_fp": { "type": "string" },
+            "selector_policy_id": { "type": "string" },
+            "budget_cfg_fp": { "type": "string" }
+          },
+          "required": ["allowed_ids", "fingerprints", "allowed_ids_fp", "policy_fp", "snapshot_etag", "bundle_fp"]
+        },
+        "answer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "blocks": { "$ref": "./answer.blocks.json" },
+            "short_answer": { "type": "string", "minLength": 1 },
+            "cited_ids": {
+              "type": "array",
+              "items": { "$ref": "./anchor.json" },
+              "minItems": 1,
+              "uniqueItems": true
+            }
+          },
+          "required": ["blocks"]
+        },
+        "completeness_flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "has_preceding": { "type": "boolean" },
+            "has_succeeding": { "type": "boolean" },
+            "event_count": { "type": "integer" }
+          },
+          "required": ["has_preceding", "has_succeeding"]
+        }
+      },
+      "required": ["anchor", "graph", "meta", "answer", "completeness_flags"]
+    }
+  },
+  "required": ["schema_version", "response"]
+}

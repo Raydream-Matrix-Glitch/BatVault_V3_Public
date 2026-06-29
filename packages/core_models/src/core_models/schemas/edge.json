@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://batvault.dev/schemas/edge.json",
+  "title": "Edge",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "type": {
+      "type": "string",
+      "enum": ["LED_TO", "CAUSAL", "ALIAS_OF"]
+    },
+    "from": { "$ref": "./anchor.json" },
+    "to": { "$ref": "./anchor.json" },
+    "domain": { "$ref": "./domain.json" },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    }
+  },
+  "required": ["id", "type", "from", "to", "timestamp"]
+}

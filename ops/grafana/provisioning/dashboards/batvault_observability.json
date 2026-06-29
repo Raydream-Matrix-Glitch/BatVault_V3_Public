@@ -1,0 +1,89 @@
+{
+  "title": "BatVault Observability",
+  "schemaVersion": 39,
+  "version": 2,
+  "editable": true,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Resolver Cache Hit Ratio (%)",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(cache_hit_total{service=\"resolver\"}[5m])) / (sum(rate(cache_hit_total{service=\"resolver\"}[5m])) + sum(rate(cache_miss_total{service=\"resolver\"}[5m])))",
+          "legendFormat": "resolver hit %"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "list" },
+        "exemplars": true
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Boundary Signals",
+      "targets": [
+        { "expr": "sum(rate(memory_api_http_requests_total{code=~\"403|404\"}[5m]))", "legendFormat": "403/404 /s" },
+        { "expr": "sum(rate(memory_api_http_requests_total{code=\"412\"}[5m]))", "legendFormat": "412 /s" }
+      ],
+      "options": {
+        "legend": { "displayMode": "list" },
+        "exemplars": true
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "P95 TTFB (Gateway /v2/query)",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(gateway_ttfb_seconds_bucket{route=\"/v2/query\"}[5m])) by (le))",
+          "legendFormat": "p95 s"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Stage P95 (selector/bundle/expand)",
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(gateway_stage_selector_seconds_bucket[5m])) by (le))", "legendFormat": "selector p95" },
+        { "expr": "histogram_quantile(0.95, sum(rate(gateway_stage_bundle_seconds_bucket[5m])) by (le))", "legendFormat": "bundle p95" },
+        { "expr": "histogram_quantile(0.95, sum(rate(memory_stage_expand_seconds_bucket[5m])) by (le))", "legendFormat": "expand p95" }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    }
+    ,
+    {
+      "type": "stat",
+      "title": "Graph FP Mismatch Rate (5m)",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(gateway_graph_fp_mismatch_total[5m])) / clamp_min(sum(rate(gateway_graph_fp_mismatch_total[5m])) + sum(rate(gateway_graph_fp_verified_total[5m])), 1)",
+          "legendFormat": "mismatch % (5m)"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Graph FP Mismatch Rate (%)",
+      "fieldConfig": { "defaults": { "unit": "percentunit" } },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 24 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(gateway_graph_fp_mismatch_total[5m])) / clamp_min(sum(rate(gateway_graph_fp_mismatch_total[5m])) + sum(rate(gateway_graph_fp_verified_total[5m])), 1)",
+          "legendFormat": "mismatch % (5m)"
+        }
+      ],
+      "options": { "legend": { "displayMode": "list" }, "exemplars": true }
+    }
+  ],
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": { "refresh_intervals": ["5s","10s","30s","1m"] }
+}

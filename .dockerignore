@@ -1,0 +1,29 @@
+.git
+.git/**
+**/.DS_Store
+
+**/node_modules
+**/dist
+**/build
+**/.cache
+**/.turbo
+**/.vite
+**/.next
+**/*.log
+
+# ---- Env / local
+**/.env
+**/.env.*
+
+**/*.pem
+# Allow the public verifier key through (remove if you don't ship the PEM)
+!batvault_frontend/public/keys/gateway_ed25519_pub.pem
+
+# ---- Keep critical frontend build inputs IN the context
+!batvault_frontend/package*.json
+!batvault_frontend/index.html
+!batvault_frontend/public/**
+!batvault_frontend/scripts/**
+!batvault_frontend/nginx.conf
+!scripts/**            # root build helper scripts (gen_* .mjs)
+!packages/**           # shared monorepo packages needed by the frontend build

@@ -1,0 +1,283 @@
+services:
+
+  # ---- Monitoring Stack ---------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--web.enable-lifecycle", "--log.level=warn", "--log.format=json"]
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9090:9090"]
+    networks: [batnet]
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    env_file:
+      - .env
+    restart: unless-stopped
+    volumes:
+      - ./ops/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./ops/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3000:3000"]
+    environment:
+      - GF_LOG_LEVEL=warn
+      - GF_LOG_CONSOLE_LEVEL=warn
+      # Keep alerting etc.; drop noisy "info" lines:
+      - "GF_LOG_FILTERS=provisioning.*:error ngalert.*:warn grafana-apiserver:warn plugins.update.checker:warn grafana.update.checker:warn"
+      # Remove update/usage spam entirely:
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    depends_on: [prometheus]
+    networks: [batnet]
+
+  arangodb:
+    image: arangodb:3.12.4
+    restart: always
+    env_file:
+      - .env
+    command: >
+      arangod
+      --server.endpoint=tcp://0.0.0.0:8529
+      --server.authentication=false
+      --experimental-vector-index
+    ports:
+      - "8529:8529"
+    volumes:
+      - ./docker-data/arangodb:/var/lib/arangodb3
+    networks: [batnet]
+
+  bootstrap:
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.bootstrap
+      args:
+        SERVICE_NAME:
+    depends_on:
+      arangodb:
+        condition: service_started
+    volumes:
+      - ./:/app
+    working_dir: /app
+    entrypoint: ["python", "ops/bootstrap.py"]
+    restart: "no"
+    networks: [batnet]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [batnet]
+
+  opa:
+    image: ${OPA_IMAGE:-openpolicyagent/opa:0.67.1}
+    user: "1000:1000"
+    command: ["run", "--server", "--addr=0.0.0.0:8181", "/policies"]
+    volumes:
+      - ./policy/opa:/policies:ro
+    ports: ["8181:8181"]
+    restart: unless-stopped
+    networks: [batnet]
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./docker-data/minio:/data
+    healthcheck:
+      test: ["CMD", "bash", "-lc", "curl -s http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      disable: false
+    networks: [batnet]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.103.1
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./ops/otel/otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "13133:13133"
+    networks: [batnet]
+
+  api_edge:
+    image: batvault/python-svc:dev
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.python
+    environment:
+      - OTEL_SERVICE_NAME=api_edge
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - SERVICE_NAME=api_edge
+      - BATVAULT_HEALTH_PORT=8080
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    env_file:
+      - .env
+    command: ["python", "-m", "api_edge.__main__"]
+    ports: ["8080:8080"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/readyz || curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    depends_on:
+      gateway:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [batnet]
+
+  gateway:
+    image: batvault/python-svc:dev
+    build:
+      context: .
+      dockerfile: ops/docker/Dockerfile.python
+      args:
+        SERVICE_NAME: gateway
+    environment:
+      - OTEL_SERVICE_NAME=gateway
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - SERVICE_NAME=gateway
+      - BATVAULT_HEALTH_PORT=8081
+      - BATVAULT_SCHEMAS_DIR=/app/packages/core_models/src/core_models/schemas
+      - GATEWAY_TEMPLATE_REGISTRY_PATH=/app/packages/core_models/src/core_models/schemas/answer_templates.default.json
+      - MEMORY_API_URL=http://memory_api:8000
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    env_file:
+      - .env
+    command: ["python", "-m", "gateway.__main__"]
+    ports: ["8081:8081"]
+    healthcheck:
+      test: ["CMD-SHELL","curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/readyz || curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    depends_on:
+      memory_api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [batnet]
+
+  memory_api:
+    image: batvault/python-svc:dev
+    environment:
+      - LOG_SUMMARY_EMIT=1
+      - OTEL_SERVICE_NAME=memory_api
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - SERVICE_NAME=memory_api
+      - BATVAULT_HEALTH_PORT=8000
+      - POLICY_DIR=/app/policy/roles
+      - OPA_URL=http://opa:8181
+      - CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+    env_file:
+      - .env
+    command: ["python", "-m", "memory_api.__main__"]
+    volumes:
+      - ./policy/roles:/app/policy/roles:ro
+    ports: ["8082:8000"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/readyz || curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/healthz"]
+      interval: 10s
+      start_period: 15s
+      retries: 5
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [batnet]
+  ingest:
+    image: batvault/python-svc:dev
+    environment:
+      - OTEL_SERVICE_NAME=ingest
+      - SERVICE_NAME=ingest
+      - BATVAULT_HEALTH_PORT=8083
+      - BATVAULT_INGEST_PROCESS=1
+    env_file:
+      - .env
+    command: ["python", "-m", "ingest.__main__"]
+    ports: ["8083:8083"]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/readyz || curl -fsS http://localhost:$${BATVAULT_HEALTH_PORT}/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+    depends_on:
+      - memory_api
+      - minio
+      - otel-collector
+    restart: unless-stopped
+    volumes:
+      - ./memory/fixtures:/app/memory/fixtures:ro
+    networks: [batnet]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    env_file:
+      - .env
+    restart: unless-stopped
+    ports:
+      - "16686:16686"
+      - "14250:14250"
+      - "14268:14268"
+    networks: [batnet]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: batvault_frontend/dockerfile
+      args:
+        VITE_GATEWAY_BASE: ""
+        VITE_MEMORY_BASE:  ""
+    ports:
+      - "5173:80"
+    depends_on:
+      api_edge:
+        condition: service_healthy
+    networks: [batnet]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  models-cache:
+
+networks:
+  batnet:
+    driver: bridge
